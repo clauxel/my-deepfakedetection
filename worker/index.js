@@ -1,0 +1,434 @@
+import { keywordPages } from '../src/content/keyword-pages.js'
+import { forecastDemand } from '../src/lib/forecast.js'
+
+const CANONICAL_ORIGIN = 'https://aidemandforecasting.space'
+const CANONICAL_HOSTS = new Set(['aidemandforecasting.space', 'www.aidemandforecasting.space'])
+const ANNUAL_DISCOUNT_MULTIPLIER = 0.5
+
+const creemProductCache = new Map()
+
+const planCatalog = {
+  starter: {
+    id: 'starter',
+    name: 'Starter',
+    monthlyAmountCents: 4900,
+    currency: 'USD',
+    summary: '<=100 SKU with Shopify sync, forecasts, reorder list, and email alerts',
+  },
+  growth: {
+    id: 'growth',
+    name: 'Growth',
+    monthlyAmountCents: 14900,
+    currency: 'USD',
+    summary: '<=1000 SKU with promotion adjustments, Slack alerts, and accuracy tracking',
+  },
+  pro: {
+    id: 'pro',
+    name: 'Pro',
+    monthlyAmountCents: 29900,
+    currency: 'USD',
+    summary: 'unlimited SKU, multi-store rollups, and priority onboarding',
+  },
+}
+
+const indexablePaths = ['/', ...keywordPages.map((page) => page.path), '/privacy', '/terms']
+const staticAssetPaths = new Set([...indexablePaths])
+
+export function securityHeaders() {
+  return new Headers({
+    'X-Content-Type-Options': 'nosniff',
+    'Referrer-Policy': 'strict-origin-when-cross-origin',
+    'Permissions-Policy': 'camera=(), microphone=(), geolocation=(), payment=()',
+    'Strict-Transport-Security': 'max-age=31536000; includeSubDomains; preload',
+  })
+}
+
+function withSecurityHeaders(response) {
+  const headers = new Headers(response.headers)
+  for (const [key, value] of securityHeaders()) headers.set(key, value)
+  return new Response(response.body, {
+    status: response.status,
+    statusText: response.statusText,
+    headers,
+  })
+}
+
+export function jsonResponse(data, status = 200) {
+  const headers = securityHeaders()
+  headers.set('Content-Type', 'application/json; charset=utf-8')
+  return new Response(JSON.stringify(data), { status, headers })
+}
+
+function xmlResponse(body) {
+  const headers = securityHeaders()
+  headers.set('Content-Type', 'application/xml; charset=utf-8')
+  headers.set('Cache-Control', 'public, max-age=3600')
+  return new Response(body, { status: 200, headers })
+}
+
+function textResponse(body) {
+  const headers = securityHeaders()
+  headers.set('Content-Type', 'text/plain; charset=utf-8')
+  headers.set('Cache-Control', 'public, max-age=3600')
+  return new Response(body, { status: 200, headers })
+}
+
+function maybeRedirectToHttps(requestUrl) {
+  if (requestUrl.protocol !== 'https:' && CANONICAL_HOSTS.has(requestUrl.hostname)) {
+    const redirectUrl = new URL(requestUrl)
+    redirectUrl.protocol = 'https:'
+    return Response.redirect(redirectUrl.toString(), 308)
+  }
+  return null
+}
+
+function resolvePublicAppOrigin(requestUrl) {
+  if (CANONICAL_HOSTS.has(requestUrl.hostname)) return `https://${requestUrl.hostname}`
+  if (requestUrl.hostname.endsWith('.workers.dev') || requestUrl.hostname.endsWith('.pages.dev')) return requestUrl.origin
+  return CANONICAL_ORIGIN
+}
+
+function resolveCreemBase(env) {
+  const raw = String(env?.CREEM_API_BASE || '').trim()
+  return raw ? raw.replace(/\/+$/, '') : 'https://api.creem.io'
+}
+
+async function getSecretValue(value) {
+  if (typeof value === 'string') return value.trim()
+  if (value && typeof value.get === 'function') {
+    const resolved = await value.get()
+    return typeof resolved === 'string' ? resolved.trim() : ''
+  }
+  return ''
+}
+
+async function firstSecretEnv(env, ...keys) {
+  for (const key of keys) {
+    const value = await getSecretValue(env?.[key])
+    if (value) return value
+  }
+  return ''
+}
+
+function normalizeEnvKey(value) {
+  return String(value)
+    .trim()
+    .toUpperCase()
+    .replace(/[^A-Z0-9]+/g, '_')
+    .replace(/^_+|_+$/g, '')
+}
+
+function formatMoney(amountCents, currency) {
+  return new Intl.NumberFormat('en-US', {
+    style: 'currency',
+    currency,
+    maximumFractionDigits: amountCents % 100 === 0 ? 0 : 2,
+  }).format(amountCents / 100)
+}
+
+function resolveConfiguredProductId(env, planId, billing) {
+  const cycle = billing === 'monthly' ? 'MONTHLY' : 'YEARLY'
+  const normalizedSelection = normalizeEnvKey(`${planId}_${billing}`)
+  const tier = planId === 'pro' ? 'PRO' : planId === 'starter' ? 'STARTER' : 'GROWTH'
+  const keys = [
+    `CREEM_PRODUCT_AIDEMANDFORECASTING_${tier}_${cycle}`,
+    `CREEM_PRODUCT_ID_AIDEMANDFORECASTING_${normalizedSelection}`,
+    `CREEM_PRODUCT_ID_${normalizedSelection}`,
+    `CREEM_PRODUCT_ID_${tier}`,
+    'CREEM_PRODUCT_ID',
+  ]
+
+  for (const key of keys) {
+    const value = env?.[key]
+    if (typeof value === 'string' && value.trim()) return value.trim()
+  }
+  return ''
+}
+
+async function requestCreemJson(apiKey, url, body) {
+  const response = await fetch(url, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'x-api-key': apiKey,
+    },
+    body: JSON.stringify(body),
+  })
+
+  const rawText = await response.text()
+  let payload = null
+  if (rawText) {
+    try {
+      payload = JSON.parse(rawText)
+    } catch {
+      payload = null
+    }
+  }
+
+  if (!response.ok) {
+    throw new Error(
+      payload && typeof payload === 'object'
+        ? payload.message || payload.error || 'Creem request failed.'
+        : 'Creem request failed.',
+    )
+  }
+
+  return payload || {}
+}
+
+async function getOrCreateCreemProduct(env, apiKey, plan, billing, successUrl) {
+  const configuredProductId = resolveConfiguredProductId(env, plan.id, billing)
+  if (configuredProductId) return configuredProductId
+
+  const cacheKey = `${plan.id}:${billing}`
+  if (creemProductCache.has(cacheKey)) return creemProductCache.get(cacheKey)
+
+  const effectiveMonthlyCents =
+    billing === 'annual' ? Math.round(plan.monthlyAmountCents * ANNUAL_DISCOUNT_MULTIPLIER) : plan.monthlyAmountCents
+  const totalAmountCents = billing === 'annual' ? effectiveMonthlyCents * 12 : effectiveMonthlyCents
+  const billingLabel = billing === 'annual' ? 'annual' : 'monthly'
+
+  const product = await requestCreemJson(apiKey, `${resolveCreemBase(env)}/v1/products`, {
+    name: `AI Demand Forecasting ${plan.name} (${billingLabel})`,
+    description: `${formatMoney(effectiveMonthlyCents, plan.currency)}/mo - ${plan.summary}`,
+    price: totalAmountCents,
+    currency: plan.currency,
+    billing_type: 'onetime',
+    tax_mode: 'inclusive',
+    tax_category: 'saas',
+    default_success_url: successUrl,
+  })
+
+  const productId = product.id || product.product_id
+  if (!productId) throw new Error('Creem did not return a product id.')
+
+  creemProductCache.set(cacheKey, productId)
+  return productId
+}
+
+function extractCheckoutUrl(payload) {
+  const candidates = [payload?.checkout_url, payload?.checkoutUrl, payload?.url]
+  for (const candidate of candidates) {
+    if (typeof candidate === 'string' && candidate.trim()) return candidate.trim()
+  }
+  return ''
+}
+
+export async function handleCheckout(request, env, requestUrl = new URL(request.url)) {
+  if (request.method !== 'POST') return jsonResponse({ ok: false, error: 'Method not allowed.' }, 405)
+
+  const apiKey = await firstSecretEnv(env, 'API_PROD_KEY', 'CREEM_API_KEY', 'CREEM_KEY')
+  if (!apiKey) return jsonResponse({ ok: false, error: 'Payment is not configured yet.' }, 503)
+
+  let body
+  try {
+    body = await request.json()
+  } catch {
+    return jsonResponse({ ok: false, error: 'Invalid JSON body.' }, 400)
+  }
+
+  const planId = typeof body?.planId === 'string' ? body.planId : 'growth'
+  const billing = body?.billing === 'monthly' ? 'monthly' : 'annual'
+  const plan = planCatalog[planId] || planCatalog.growth
+  const successUrl = `${resolvePublicAppOrigin(requestUrl)}/?checkout=success`
+
+  try {
+    const productId = await getOrCreateCreemProduct(env, apiKey, plan, billing, successUrl)
+    const checkout = await requestCreemJson(apiKey, `${resolveCreemBase(env)}/v1/checkouts`, {
+      product_id: productId,
+      units: 1,
+      success_url: successUrl,
+      request_id: `aidemandforecasting_${plan.id}_${billing}_${Date.now()}_${Math.random().toString(16).slice(2)}`,
+      metadata: {
+        site: 'aidemandforecasting.space',
+        planId: plan.id,
+        billing,
+      },
+    })
+    const checkoutUrl = extractCheckoutUrl(checkout)
+    if (!checkoutUrl) throw new Error('Creem did not return a checkout URL.')
+    return jsonResponse({ ok: true, checkoutUrl })
+  } catch {
+    return jsonResponse({ ok: false, error: 'Secure checkout could not be created yet.' }, 502)
+  }
+}
+
+export function handleRuntime(requestUrl = new URL(CANONICAL_ORIGIN)) {
+  return jsonResponse({
+    ok: true,
+    publicAppOrigin: resolvePublicAppOrigin(requestUrl),
+    deployment: 'cloudflare-workers-assets',
+    paymentProvider: 'creem',
+    ts: Date.now(),
+  })
+}
+
+export async function handleForecast(request) {
+  if (request.method !== 'POST') return jsonResponse({ ok: false, error: 'Method not allowed.' }, 405)
+  try {
+    const body = await request.json()
+    return jsonResponse({ ok: true, result: forecastDemand(body || {}) })
+  } catch {
+    return jsonResponse({ ok: false, error: 'Invalid JSON body.' }, 400)
+  }
+}
+
+function sanitizeAnalyticsValue(value, max = 180) {
+  return String(value ?? '')
+    .replace(/[^\w .:/?=&@+-]/g, '')
+    .slice(0, max)
+}
+
+async function persistEvent(env, event) {
+  if (env?.ANALYTICS_KV?.put) {
+    const key = `events/${new Date(event.ts).toISOString().slice(0, 10)}/${event.ts}-${crypto.randomUUID()}`
+    await env.ANALYTICS_KV.put(key, JSON.stringify(event), { expirationTtl: 60 * 60 * 24 * 180 })
+  }
+}
+
+export async function handleReminder(request, env) {
+  if (request.method !== 'POST') return jsonResponse({ ok: false, error: 'Method not allowed.' }, 405)
+
+  let body = {}
+  try {
+    body = await request.json()
+  } catch {
+    body = {}
+  }
+
+  const email = sanitizeAnalyticsValue(body.email || '', 160)
+  const sku = sanitizeAnalyticsValue(body.sku || '', 140)
+  if (!email || !email.includes('@')) return jsonResponse({ ok: false, error: 'A valid email is required.' }, 400)
+
+  const event = {
+    site: 'aidemandforecasting.space',
+    type: 'forecast_alert_request',
+    email,
+    sku,
+    ts: Date.now(),
+  }
+  console.log(JSON.stringify(event))
+  await persistEvent(env, event)
+  return jsonResponse({ ok: true, message: 'Forecast alert request captured.' })
+}
+
+export async function handleAnalytics(request, env) {
+  if (request.method !== 'POST') return jsonResponse({ ok: false, error: 'Method not allowed.' }, 405)
+
+  let body = {}
+  try {
+    body = await request.json()
+  } catch {
+    body = {}
+  }
+
+  const event = {
+    site: 'aidemandforecasting.space',
+    type: 'analytics',
+    event: sanitizeAnalyticsValue(body.event || 'unknown', 80),
+    path: sanitizeAnalyticsValue(body.path || '/', 220),
+    route: sanitizeAnalyticsValue(body.route || '', 220),
+    sku: sanitizeAnalyticsValue(body.sku || '', 80),
+    planId: sanitizeAnalyticsValue(body.planId || '', 40),
+    billing: sanitizeAnalyticsValue(body.billing || '', 40),
+    stockoutRisk: sanitizeAnalyticsValue(body.stockoutRisk || '', 40),
+    overstockRisk: sanitizeAnalyticsValue(body.overstockRisk || '', 40),
+    utm: body.utm && typeof body.utm === 'object' ? body.utm : {},
+    ts: Date.now(),
+  }
+
+  console.log(JSON.stringify({ type: 'aidemandforecasting_analytics', ...event }))
+  try {
+    await persistEvent(env, event)
+  } catch {
+    console.log(JSON.stringify({ type: 'aidemandforecasting_analytics_persist_error', ts: Date.now() }))
+  }
+  return jsonResponse({ ok: true })
+}
+
+export function buildSitemapXml() {
+  const today = new Date().toISOString().slice(0, 10)
+  const urls = indexablePaths
+    .map((path) => {
+      const priority = path === '/' ? '1.0' : path === '/privacy' || path === '/terms' ? '0.35' : '0.78'
+      const changefreq = path === '/' ? 'weekly' : 'monthly'
+      const locPath = path === '/' ? '/' : `${path}/`
+      return `  <url>
+    <loc>${CANONICAL_ORIGIN}${locPath}</loc>
+    <lastmod>${today}</lastmod>
+    <changefreq>${changefreq}</changefreq>
+    <priority>${priority}</priority>
+  </url>`
+    })
+    .join('\n')
+
+  return `<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+${urls}
+</urlset>`
+}
+
+export function handleSitemap() {
+  return xmlResponse(buildSitemapXml())
+}
+
+export function buildRobotsTxt() {
+  return `User-agent: *
+Allow: /
+Disallow: /api/
+Sitemap: ${CANONICAL_ORIGIN}/sitemap.xml
+`
+}
+
+export function handleRobots() {
+  return textResponse(buildRobotsTxt())
+}
+
+async function fetchAsset(request, env) {
+  if (env?.ASSETS?.fetch) {
+    const requestUrl = new URL(request.url)
+    const normalizedPath = requestUrl.pathname.replace(/\/+$/, '') || '/'
+
+    if (staticAssetPaths.has(normalizedPath)) {
+      const assetUrl = new URL(request.url)
+      assetUrl.pathname = normalizedPath === '/' ? '/index.html' : `${normalizedPath}/index.html`
+      const assetResponse = await env.ASSETS.fetch(new Request(assetUrl.toString(), request))
+      if (assetResponse.status !== 404) return withSecurityHeaders(assetResponse)
+    }
+
+    return withSecurityHeaders(await env.ASSETS.fetch(request))
+  }
+
+  return new Response('Cloudflare ASSETS binding is unavailable.', {
+    status: 500,
+    headers: securityHeaders(),
+  })
+}
+
+export async function handleRequest(request, env) {
+  const requestUrl = new URL(request.url)
+
+  if (requestUrl.pathname === '/api/runtime') return handleRuntime(requestUrl)
+  if (requestUrl.pathname === '/api/checkout') return handleCheckout(request, env, requestUrl)
+  if (requestUrl.pathname === '/api/forecast' || requestUrl.pathname === '/api/scan') return handleForecast(request)
+  if (requestUrl.pathname === '/api/reminder') return handleReminder(request, env)
+  if (requestUrl.pathname === '/api/analytics') return handleAnalytics(request, env)
+
+  const httpsRedirect = maybeRedirectToHttps(requestUrl)
+  if (httpsRedirect) return httpsRedirect
+
+  if (requestUrl.pathname === '/sitemap.xml') return handleSitemap()
+  if (requestUrl.pathname === '/robots.txt') return handleRobots()
+
+  return fetchAsset(request, env)
+}
+
+export default {
+  async fetch(request, env) {
+    try {
+      return await handleRequest(request, env)
+    } catch {
+      return jsonResponse({ ok: false, error: 'Internal server error.' }, 500)
+    }
+  },
+}

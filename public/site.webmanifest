@@ -1,0 +1,15 @@
+{
+  "name": "AI Demand Forecasting",
+  "short_name": "Demand AI",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#f5f7f1",
+  "theme_color": "#12372f",
+  "icons": [
+    {
+      "src": "/favicon.svg",
+      "sizes": "64x64",
+      "type": "image/svg+xml"
+    }
+  ]
+}

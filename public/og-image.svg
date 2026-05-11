@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630" role="img" aria-label="AI Demand Forecasting dashboard preview">
+  <rect width="1200" height="630" fill="#f5f7f1"/>
+  <rect x="72" y="72" width="1056" height="486" rx="24" fill="#12372f"/>
+  <rect x="122" y="122" width="410" height="84" rx="14" fill="#fffaf0"/>
+  <rect x="122" y="238" width="410" height="236" rx="14" fill="#fffaf0"/>
+  <rect x="584" y="122" width="494" height="352" rx="14" fill="#fffaf0"/>
+  <text x="152" y="174" font-family="Inter, Arial, sans-serif" font-size="34" font-weight="800" fill="#12372f">AI Demand Forecasting</text>
+  <text x="152" y="288" font-family="Inter, Arial, sans-serif" font-size="26" font-weight="800" fill="#12372f">Reorder 612 units</text>
+  <text x="152" y="332" font-family="Inter, Arial, sans-serif" font-size="22" fill="#4b625b">Next purchase order: Tuesday</text>
+  <text x="152" y="376" font-family="Inter, Arial, sans-serif" font-size="22" fill="#4b625b">30 / 60 / 90 day SKU forecast</text>
+  <text x="152" y="420" font-family="Inter, Arial, sans-serif" font-size="22" fill="#4b625b">Stockout and overstock alerts</text>
+  <path d="M632 396h398" stroke="#d9e1d7" stroke-width="4"/>
+  <path d="M632 350h398" stroke="#d9e1d7" stroke-width="4"/>
+  <path d="M632 304h398" stroke="#d9e1d7" stroke-width="4"/>
+  <path d="M632 258h398" stroke="#d9e1d7" stroke-width="4"/>
+  <path d="M652 376c46-78 98-56 143-92 52-41 98 10 145-36 34-33 63-46 91-58" fill="none" stroke="#0f9b72" stroke-width="10" stroke-linecap="round"/>
+  <path d="M652 400c44-39 86-24 131-50 54-32 103 6 154-24 39-24 70-29 96-34" fill="none" stroke="#f7c948" stroke-width="10" stroke-linecap="round"/>
+</svg>
