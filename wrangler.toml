@@ -3,6 +3,7 @@ main = "worker/index.js"
 compatibility_date = "2026-05-11"
 account_id = "615b05ce6668dd8e0e2431077fc29c82"
 workers_dev = true
+pages_build_output_dir = "dist"
 routes = [
   { pattern = "deepfakedetection.site/*", zone_name = "deepfakedetection.site" },
   { pattern = "www.deepfakedetection.site/*", zone_name = "deepfakedetection.site" }
