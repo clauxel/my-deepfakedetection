@@ -1,0 +1,29 @@
+name = "my-deepfakedetection"
+main = "worker/index.js"
+compatibility_date = "2026-05-11"
+account_id = "615b05ce6668dd8e0e2431077fc29c82"
+workers_dev = true
+routes = [
+  { pattern = "deepfakedetection.site/*", zone_name = "deepfakedetection.site" },
+  { pattern = "www.deepfakedetection.site/*", zone_name = "deepfakedetection.site" }
+]
+
+[vars]
+APP_ORIGIN = "https://deepfakedetection.site"
+CREEM_API_BASE = "https://api.creem.io"
+CREEM_ENV = "live"
+
+[assets]
+directory = "./dist"
+binding = "ASSETS"
+not_found_handling = "single-page-application"
+run_worker_first = [
+  "/api/*",
+  "/sitemap.xml",
+  "/robots.txt",
+  "/BingSiteAuth.xml"
+]
+
+[[kv_namespaces]]
+binding = "ANALYTICS_KV"
+id = "00000000000000000000000000000000"

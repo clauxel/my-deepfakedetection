@@ -1,0 +1,15 @@
+{
+  "name": "Deepfake Detection",
+  "short_name": "Deepfake Detection",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#eef6f7",
+  "theme_color": "#08262f",
+  "icons": [
+    {
+      "src": "/favicon.svg",
+      "sizes": "64x64",
+      "type": "image/svg+xml"
+    }
+  ]
+}
