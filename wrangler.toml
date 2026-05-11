@@ -26,4 +26,4 @@ run_worker_first = [
 
 [[kv_namespaces]]
 binding = "ANALYTICS_KV"
-id = "00000000000000000000000000000000"
+id = "2e34a5c33e3b4b42859c98fe35b0bbf8"
