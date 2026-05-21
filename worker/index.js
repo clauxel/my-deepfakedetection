@@ -1,5 +1,7 @@
 import { keywordPages } from '../src/content/keyword-pages.js'
 import { classifyMediaSample } from '../src/lib/risk.js'
+import { recordAnalyticsEvents } from './analytics.js'
+import { handleNowPaymentsCheckout } from './nowpayments.js'
 
 const CANONICAL_ORIGIN = 'https://deepfakedetection.site'
 const CANONICAL_HOSTS = new Set(['deepfakedetection.site', 'www.deepfakedetection.site'])
@@ -66,11 +68,15 @@ function textResponse(body) {
   return new Response(body, { status: 200, headers })
 }
 
-function maybeRedirectToHttps(requestUrl) {
-  if (requestUrl.protocol !== 'https:' && CANONICAL_HOSTS.has(requestUrl.hostname)) {
+function maybeRedirectToHttps(requestUrl, request) {
+  if (typeof isLocalDevRequest === 'function' && isLocalDevRequest(request)) return null
+  const canonicalUrl = new URL(CANONICAL_ORIGIN)
+  const isKnownHost = typeof CANONICAL_HOSTS !== 'undefined' && CANONICAL_HOSTS.has(requestUrl.hostname)
+  if (isKnownHost && (requestUrl.protocol !== 'https:' || requestUrl.hostname !== canonicalUrl.hostname)) {
     const redirectUrl = new URL(requestUrl)
     redirectUrl.protocol = 'https:'
-    return Response.redirect(redirectUrl.toString(), 308)
+    redirectUrl.hostname = canonicalUrl.hostname
+    return Response.redirect(redirectUrl.toString(), 301)
   }
   return null
 }
@@ -274,10 +280,10 @@ function sanitizeAnalyticsValue(value, max = 180) {
 }
 
 async function persistEvent(env, event) {
-  if (env?.ANALYTICS_KV?.put) {
-    const key = `events/${new Date(event.ts).toISOString().slice(0, 10)}/${event.ts}-${crypto.randomUUID()}`
-    await env.ANALYTICS_KV.put(key, JSON.stringify(event), { expirationTtl: 60 * 60 * 24 * 180 })
-  }
+  await recordAnalyticsEvents(env, [event], {
+    siteKey: event.site || 'unknown',
+    requestUrl: new URL(CANONICAL_ORIGIN),
+  })
 }
 
 export async function handleReminder(request, env) {
@@ -378,6 +384,14 @@ export function handleRobots() {
   return textResponse(buildRobotsTxt())
 }
 
+function noIndexNotFoundResponse(request) {
+  const headers = securityHeaders(request)
+  headers.set('Content-Type', 'text/html; charset=utf-8')
+  headers.set('Cache-Control', 'no-store')
+  headers.set('X-Robots-Tag', 'noindex, nofollow')
+  return new Response('<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="robots" content="noindex,nofollow"><title>Page not found</title></head><body><main><h1>Page not found</h1><p>This URL is not a public page for this product.</p></main></body></html>', { status: 404, headers })
+}
+
 async function fetchAsset(request, env) {
   const assets = env?.SITE_ASSETS || env?.ASSETS
   if (assets?.fetch) {
@@ -402,6 +416,18 @@ async function fetchAsset(request, env) {
 
 export async function handleRequest(request, env) {
   const requestUrl = new URL(request.url)
+
+  if (requestUrl.pathname === '/api/nowpayments-checkout') {
+    return handleNowPaymentsCheckout(request, env, {
+      plans: planCatalog,
+      defaultPlanId: 'pro',
+      siteName: 'deepfakedetection',
+      siteKey: 'deepfakedetection',
+      annualDiscountMultiplier: typeof ANNUAL_DISCOUNT_MULTIPLIER !== 'undefined'
+        ? ANNUAL_DISCOUNT_MULTIPLIER
+        : (typeof annualBillingMultiplier !== 'undefined' ? annualBillingMultiplier : 0.5),
+    })
+  }
 
   if (requestUrl.pathname === '/api/runtime') return handleRuntime(requestUrl)
   if (requestUrl.pathname === '/api/checkout') return handleCheckout(request, env, requestUrl)
