@@ -216,7 +216,7 @@ function buildHomePrerender() {
           <p class="eyebrow">Deepfake Detection API</p>
           <h1>Stop synthetic KYC fraud before approval.</h1>
           <p class="lede">Add image, video, and AI voice screening in three lines, get a 0-100 probability score, and route high-risk attempts in seconds.</p>
-          <p><a class="btn btn-primary" href="#scanner">Analyze a sample</a></p>
+          <p><a class="btn btn-primary" href="/#pricing">Choose Pro annual</a></p>
         </div>
         <div class="hero-media">
           <img src="/assets/deepfake-hero.png" alt="Deepfake Detection dashboard with face, video, and audio analysis" />

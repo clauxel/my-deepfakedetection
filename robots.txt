@@ -1,0 +1,5 @@
+User-agent: *
+Allow: /
+Disallow: /api/
+Sitemap: https://deepfakedetection.site/sitemap.xml
+Allow: /llms.txt

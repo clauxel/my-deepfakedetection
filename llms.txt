@@ -1,0 +1,21 @@
+# Deepfake Detection
+
+Deepfake Detection API for KYC, fintech, HR, video, image, and audio fraud checks with probability scores, anomaly regions, webhooks, and developer-ready pricing.
+
+Website: https://deepfakedetection.site/
+Pricing: https://deepfakedetection.site/pricing/
+Checkout: https://deepfakedetection.site/checkout/
+Support: support@aigeamy.com
+Type: Hosted SaaS workflow product
+
+Problem:
+- Teams need a quotable product definition, pricing path, evidence trail, and checkout route.
+
+Solution:
+- Deepfake Detection provides a hosted workflow with public pricing, structured evidence, support contact, and report or receipt outputs.
+
+Useful pages:
+- Home: https://deepfakedetection.site/
+- Pricing: https://deepfakedetection.site/pricing/
+- Resources: https://deepfakedetection.site/resources/
+- Sitemap: https://deepfakedetection.site/sitemap.xml

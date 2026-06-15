@@ -24,9 +24,23 @@ const planCatalog = {
     currency: 'USD',
     summary: '30,000 checks with image, video, audio, webhook, usage analytics, and billing controls',
   },
+  team: {
+    id: 'team',
+    name: 'Team',
+    monthlyAmountCents: 39900,
+    currency: 'USD',
+    summary: '30,000 checks with image, video, audio, webhook, usage analytics, and billing controls',
+  },
+  platform: {
+    id: 'platform',
+    name: 'Platform',
+    monthlyAmountCents: 39900,
+    currency: 'USD',
+    summary: '30,000 checks with image, video, audio, webhook, usage analytics, and billing controls',
+  },
 }
 
-const indexablePaths = ['/', ...keywordPages.map((page) => page.path), '/privacy', '/terms']
+const indexablePaths = ['/', ...keywordPages.map((page) => page.path), '/pricing', '/resources', '/privacy', '/terms']
 const staticAssetPaths = new Set(indexablePaths)
 
 export function securityHeaders() {
@@ -400,9 +414,13 @@ async function fetchAsset(request, env) {
 
     if (staticAssetPaths.has(normalizedPath)) {
       const assetUrl = new URL(request.url)
-      assetUrl.pathname = normalizedPath === '/' ? '/index.html' : `${normalizedPath}/index.html`
+      assetUrl.pathname = normalizedPath === '/' ? '/' : `${normalizedPath}/`
       const assetResponse = await assets.fetch(new Request(assetUrl.toString(), request))
       if (assetResponse.status !== 404) return withSecurityHeaders(assetResponse)
+    }
+
+    if (normalizedPath !== '/' && !/\.[a-z0-9]+$/i.test(normalizedPath) && !staticAssetPaths.has(normalizedPath)) {
+      return noIndexNotFoundResponse(request)
     }
 
     return withSecurityHeaders(await assets.fetch(request))

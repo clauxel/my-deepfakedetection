@@ -78,6 +78,7 @@ export default function App() {
   const [scanning, setScanning] = useState(false)
   const [billing, setBilling] = useState('annual')
   const [selectedPlan, setSelectedPlan] = useState('pro')
+  const [planFlowOpen, setPlanFlowOpen] = useState(false)
   const [payment, setPayment] = useState({ open: false, loading: false, error: '', url: '' })
   const [uploadPreview, setUploadPreview] = useState('')
 
@@ -163,7 +164,7 @@ export default function App() {
     window.scrollTo({ top: 0, behavior: 'smooth' })
   }
 
-  async function openCheckout(planId = selectedPlan, cycle = billing) {
+  async function openCheckout(planId = selectedPlan, cycle = billing, provider = 'creem') {
     if (planId === 'enterprise') {
       window.location.href = `mailto:${SITE.supportEmail}?subject=Enterprise%20Deepfake%20Detection%20contract`
       return
@@ -172,7 +173,7 @@ export default function App() {
     setSelectedPlan(planId)
     setBilling(cycle)
     setPayment({ open: true, loading: true, error: '', url: '' })
-    trackEvent('checkout_click', { planId, billing: cycle })
+    trackEvent('checkout_click', { planId, billing: cycle, paymentProvider: provider })
 
     const popup = window.open('', 'creemCheckout', centeredPopupFeatures(560, 760))
     if (popup) {
@@ -183,7 +184,7 @@ export default function App() {
     }
 
     try {
-      const response = await fetch('/api/checkout', {
+      const response = await fetch(provider === 'nowpayments' ? '/api/nowpayments-checkout' : '/api/checkout', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ planId, billing: cycle }),
@@ -215,10 +216,37 @@ export default function App() {
     }
   }
 
+  function openPlanFlow(planId = 'pro', cycle = 'annual') {
+    if (planId === 'enterprise') {
+      window.location.href = `mailto:${SITE.supportEmail}?subject=Enterprise%20Deepfake%20Detection%20contract`
+      return
+    }
+    setSelectedPlan(planId)
+    setBilling(cycle)
+    setPlanFlowOpen(true)
+    trackEvent('plan_flow_opened', { planId, billing: cycle })
+  }
+
+  function continuePlanFlow() {
+    setPlanFlowOpen(false)
+    void openCheckout(selectedPlan, billing)
+  }
+
   if (page) {
     return (
-      <SiteShell navigate={navigate} onCheckout={() => openCheckout('pro', 'annual')}>
-        <KeywordPage page={page} navigate={navigate} onCheckout={() => openCheckout('pro', 'annual')} />
+      <SiteShell navigate={navigate} onCheckout={() => openPlanFlow('pro', 'annual')}>
+        <KeywordPage page={page} navigate={navigate} onCheckout={() => openPlanFlow('pro', 'annual')} />
+        <PlanFlowModal
+          open={planFlowOpen}
+          billing={billing}
+          setBilling={setBilling}
+          selectedPlan={selectedPlan}
+          setSelectedPlan={setSelectedPlan}
+          onClose={() => setPlanFlowOpen(false)}
+          onContinue={continuePlanFlow}
+          title="Launch Deepfake Detection with the right screening tier"
+          description="Start fraud scan opens plan selection first. Annual billing keeps the same path and cuts Pro to half price before secure checkout."
+        />
         <CheckoutOverlay payment={payment} setPayment={setPayment} />
       </SiteShell>
     )
@@ -226,15 +254,26 @@ export default function App() {
 
   if (path === '/privacy' || path === '/terms') {
     return (
-      <SiteShell navigate={navigate} onCheckout={() => openCheckout('pro', 'annual')}>
+      <SiteShell navigate={navigate} onCheckout={() => openPlanFlow('pro', 'annual')}>
         {path === '/privacy' ? <Privacy navigate={navigate} /> : <Terms navigate={navigate} />}
+        <PlanFlowModal
+          open={planFlowOpen}
+          billing={billing}
+          setBilling={setBilling}
+          selectedPlan={selectedPlan}
+          setSelectedPlan={setSelectedPlan}
+          onClose={() => setPlanFlowOpen(false)}
+          onContinue={continuePlanFlow}
+          title="Launch Deepfake Detection with the right screening tier"
+          description="Start fraud scan opens plan selection first. Annual billing keeps the same path and cuts Pro to half price before secure checkout."
+        />
         <CheckoutOverlay payment={payment} setPayment={setPayment} />
       </SiteShell>
     )
   }
 
   return (
-    <SiteShell navigate={navigate} onCheckout={() => openCheckout('pro', 'annual')}>
+    <SiteShell navigate={navigate} onCheckout={() => openPlanFlow('pro', 'annual')}>
       <main>
         <section className="hero" id="api">
           <div className="hero-copy">
@@ -245,12 +284,12 @@ export default function App() {
               lines, get a 0-100 probability score, and route high-risk attempts in seconds.
             </p>
             <div className="hero-actions">
-              <a className="btn btn-primary" href="#scanner">
-                Analyze a sample <ArrowRight size={18} />
-              </a>
-              <button className="btn btn-quiet" type="button" onClick={() => openCheckout('pro', 'annual')}>
-                Start Pro annual
+              <button className="btn btn-primary" type="button" onClick={() => openPlanFlow('pro', 'annual')}>
+                Start fraud scan <ArrowRight size={18} />
               </button>
+              <a className="btn btn-quiet" href="#scanner">
+                Analyze a sample
+              </a>
             </div>
             <div className="trust-row" aria-label="Product proof points">
               <span>
@@ -342,7 +381,7 @@ export default function App() {
           </div>
         </section>
 
-        <Pricing billing={billing} setBilling={setBilling} selectedPlan={selectedPlan} openCheckout={openCheckout} />
+        <Pricing billing={billing} setBilling={setBilling} selectedPlan={selectedPlan} openCheckout={openPlanFlow} />
 
         <section className="section resources-section" id="resources">
           <div className="section-heading">
@@ -360,6 +399,17 @@ export default function App() {
           </div>
         </section>
       </main>
+      <PlanFlowModal
+        open={planFlowOpen}
+        billing={billing}
+        setBilling={setBilling}
+        selectedPlan={selectedPlan}
+        setSelectedPlan={setSelectedPlan}
+        onClose={() => setPlanFlowOpen(false)}
+        onContinue={continuePlanFlow}
+        title="Launch Deepfake Detection with the right screening tier"
+        description="Start fraud scan opens plan selection first. Annual billing keeps the same path and cuts Pro to half price before secure checkout."
+      />
       <CheckoutOverlay payment={payment} setPayment={setPayment} />
     </SiteShell>
   )
@@ -379,7 +429,7 @@ function SiteShell({ children, navigate, onCheckout }) {
           <a href="/#pricing">Pricing</a>
           <a href="/#resources">Resources</a>
           <button type="button" onClick={onCheckout}>
-            Checkout
+            Start fraud scan
           </button>
         </nav>
       </header>
@@ -594,7 +644,7 @@ function Pricing({ billing, setBilling, selectedPlan, openCheckout }) {
 
       <div className="billing-toggle" role="group" aria-label="Billing cycle">
         <button className={annual ? 'active' : ''} type="button" onClick={() => setBilling('annual')}>
-          Annual - save 50%
+          Annual - 50% off
         </button>
         <button className={!annual ? 'active' : ''} type="button" onClick={() => setBilling('monthly')}>
           Monthly
@@ -636,7 +686,7 @@ function Pricing({ billing, setBilling, selectedPlan, openCheckout }) {
                 type="button"
                 onClick={() => openCheckout(plan.id, billing)}
               >
-                {isContract ? 'Contact sales' : 'Checkout'} <ArrowRight size={18} />
+                {isContract ? 'Contact sales' : `Continue with ${plan.name}`} <ArrowRight size={18} />
               </button>
             </article>
           )
@@ -691,7 +741,7 @@ function KeywordPage({ page, navigate, onCheckout }) {
             <p>Open the Pro annual checkout with image, video, audio, dashboard, and webhook support included.</p>
           </div>
           <button className="btn btn-primary" type="button" onClick={onCheckout}>
-            Choose Pro annual <ArrowRight size={18} />
+            Start fraud scan <ArrowRight size={18} />
           </button>
         </aside>
       </article>
@@ -847,6 +897,92 @@ function Footer({ navigate }) {
         </a>
       </nav>
     </footer>
+  )
+}
+
+function PlanFlowModal({ open, billing, setBilling, selectedPlan, setSelectedPlan, onClose, onContinue, title, description }) {
+  if (!open) return null
+
+  const annual = billing === 'annual'
+  const activePlan = plans.find((plan) => plan.id === selectedPlan) || plans[1]
+  const paidPlans = plans.filter((plan) => plan.monthly !== null)
+  const activeMonthly = activePlan.monthly === null ? null : annual ? activePlan.monthly * 0.5 : activePlan.monthly
+  const activeYearly = activeMonthly === null ? null : activeMonthly * 12
+
+  return (
+    <div
+      className="plan-flow-overlay"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="plan-flow-title"
+      onClick={(event) => {
+        if (event.currentTarget === event.target) onClose()
+      }}
+    >
+      <div className="plan-flow-modal">
+        <button className="icon-button" type="button" onClick={onClose} aria-label="Close plan chooser">
+          <X size={18} />
+        </button>
+        <p className="eyebrow">Choose your plan</p>
+        <h2 id="plan-flow-title">{title}</h2>
+        <p>{description}</p>
+
+        <div className="billing-toggle compact" role="group" aria-label="Billing cycle">
+          <button className={annual ? 'active' : ''} type="button" onClick={() => setBilling('annual')}>
+            Yearly 50% off
+          </button>
+          <button className={!annual ? 'active' : ''} type="button" onClick={() => setBilling('monthly')}>
+            Monthly
+          </button>
+        </div>
+
+        <div className="plan-flow-grid">
+          {paidPlans.map((plan) => {
+            const monthly = annual ? plan.monthly * 0.5 : plan.monthly
+            const yearly = monthly * 12
+            const active = selectedPlan === plan.id
+            return (
+              <button
+                type="button"
+                key={plan.id}
+                className={`plan-flow-card ${active ? 'selected' : ''}`}
+                onClick={() => setSelectedPlan(plan.id)}
+              >
+                <span>{plan.limit}</span>
+                <strong>{plan.name}</strong>
+                <small>{plan.summary}</small>
+                <b>${formatPrice(monthly)} /mo</b>
+                <em>{annual ? `Billed $${formatPrice(yearly)} yearly` : 'Billed monthly'}</em>
+              </button>
+            )
+          })}
+        </div>
+
+        <div className="plan-flow-footer">
+          <div>
+            <span>Selected plan</span>
+            <strong>
+              {activePlan.name} · {annual ? 'Yearly' : 'Monthly'}
+            </strong>
+            <small>
+              {activeYearly === null
+                ? 'Contract pricing'
+                : annual
+                  ? `Billed $${formatPrice(activeYearly)} yearly. Equivalent to $${formatPrice(activeMonthly)} per month.`
+                  : `$${formatPrice(activeMonthly)} charged monthly.`}
+            </small>
+          </div>
+          <div className="plan-flow-actions">
+            <button className="btn btn-secondary" type="button" onClick={onClose}>
+              Not now
+            </button>
+            <button className="btn btn-primary" type="button" onClick={onContinue}>
+              Continue to Payment <ArrowRight size={18} />
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
   )
 }
 

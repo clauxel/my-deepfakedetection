@@ -20,4 +20,3 @@ npm test
 npm run cloudflare:deploy
 npm run pages:deploy
 ```
-
