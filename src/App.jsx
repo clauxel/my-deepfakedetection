@@ -164,7 +164,7 @@ export default function App() {
     window.scrollTo({ top: 0, behavior: 'smooth' })
   }
 
-  async function openCheckout(planId = selectedPlan, cycle = billing, provider = 'creem') {
+  async function openCheckout(planId = selectedPlan, cycle = billing, provider = 'polar') {
     if (planId === 'enterprise') {
       window.location.href = `mailto:${SITE.supportEmail}?subject=Enterprise%20Deepfake%20Detection%20contract`
       return
@@ -175,7 +175,7 @@ export default function App() {
     setPayment({ open: true, loading: true, error: '', url: '' })
     trackEvent('checkout_click', { planId, billing: cycle, paymentProvider: provider })
 
-    const popup = window.open('', 'creemCheckout', centeredPopupFeatures(560, 760))
+    const popup = window.open('', 'polarCheckout', centeredPopupFeatures(560, 760))
     if (popup) {
       popup.document.write(
         '<!doctype html><title>Secure checkout</title><body style="font-family:Arial,sans-serif;padding:28px;background:#eef7f8;color:#08262f"><h1>Opening secure checkout...</h1><p>You can keep Deepfake Detection open in the original tab.</p></body>',
@@ -184,7 +184,7 @@ export default function App() {
     }
 
     try {
-      const response = await fetch(provider === 'nowpayments' ? '/api/nowpayments-checkout' : '/api/checkout', {
+      const response = await fetch(provider === 'polar' ? '/api/polar-checkout' : '/api/checkout', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ planId, billing: cycle }),
@@ -202,7 +202,7 @@ export default function App() {
       if (popup && !popup.closed) {
         popup.location.assign(payload.checkoutUrl)
       } else {
-        window.open(payload.checkoutUrl, 'creemCheckout', centeredPopupFeatures(560, 760))
+        window.open(payload.checkoutUrl, 'polarCheckout', centeredPopupFeatures(560, 760))
       }
     } catch (error) {
       setPayment({
@@ -996,14 +996,14 @@ function CheckoutOverlay({ payment, setPayment }) {
           <X size={18} />
         </button>
         <p className="eyebrow">Secure checkout</p>
-        <h2>{payment.error ? 'Checkout needs attention' : payment.loading ? 'Opening Creem checkout' : 'Checkout is open'}</h2>
+        <h2>{payment.error ? 'Checkout needs attention' : payment.loading ? 'Opening Polar checkout' : 'Checkout is open'}</h2>
         <p>
           {payment.error
             ? payment.error
             : 'The payment window is centered while this page stays open. After payment, checkout returns to the Deepfake Detection homepage.'}
         </p>
         {payment.url ? (
-          <button className="btn btn-primary" type="button" onClick={() => window.open(payment.url, 'creemCheckout', centeredPopupFeatures(560, 760))}>
+          <button className="btn btn-primary" type="button" onClick={() => window.open(payment.url, 'polarCheckout', centeredPopupFeatures(560, 760))}>
             Reopen payment window <ArrowRight size={18} />
           </button>
         ) : null}

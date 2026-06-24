@@ -118,7 +118,7 @@
   function findProviderUrl(value, depth = 0) {
     if (!value || depth > 5) return "";
     if (typeof value === "string") {
-      if (/https?:\/\/[^\s"'<>]*(creem\.io|nowpayments)[^\s"'<>]*/i.test(value)) return value.match(/https?:\/\/[^\s"'<>]+/i)?.[0] || "";
+      if (/https?:\/\/[^\s"'<>]*(polar\.io|polar)[^\s"'<>]*/i.test(value)) return value.match(/https?:\/\/[^\s"'<>]+/i)?.[0] || "";
       return "";
     }
     if (Array.isArray(value)) {
